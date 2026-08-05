@@ -1,0 +1,54 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+__debug_bin
+
+# Logs
+*.log
+*.log.gz
+logs/
+
+# Environment
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+go.work
+vendor/
+
+# Coverage
+coverage.out
+coverage.html
+
+## Configuration
+
+Application configuration is stored in:
+
+```
+config/config-development.yml
+```
+
+## Roadmap
+
+- Docker Compose support
+- Swagger documentation
+- Refresh tokens
+- Pagination
+- Unit tests
+
+## License
+
+MIT
