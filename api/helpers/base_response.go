@@ -4,11 +4,10 @@ import (
 	validation "github.com/vertinofff/blog-api/api/validations"
 )
 
-
 type BaseHttpResponse struct {
 	Result           any                           `json:"result"`
 	Success          bool                          `json:"success"`
-	ResultCode       ResultCode                           `json:"resultCode"`
+	ResultCode       ResultCode                    `json:"resultCode"`
 	ValidationErrors *[]validation.ValidationError `json:"validationErrors"`
 	Error            any                           `json:"error"`
 }

@@ -8,12 +8,12 @@ type TokenDetail struct {
 }
 
 type RegisterUserByUsernameRequest struct {
-	Username  string `json:"username" binding:"required,min=5"`
-	Email     string `json:"email" binding:"min=6,email"`
-	Password  string `json:"password" binding:"required,password,min=6"`
+	Username string `json:"username" binding:"required,min=5,max=50"`
+	Email    string `json:"email" binding:"required,min=6,max=256,email"`
+	Password string `json:"password" binding:"required,password"`
 }
 
 type LoginByUsernameRequest struct {
-	Username string `json:"username" binding:"required,min=5"`
-	Password string `json:"password" binding:"required,min=6"`
+	Username string `json:"username" binding:"required,min=5,max=50"`
+	Password string `json:"password" binding:"required,max=64"`
 }

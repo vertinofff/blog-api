@@ -1,23 +1,23 @@
 package service_errors
 
+import "errors"
+
+var (
+	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrUnauthorized       = errors.New("unauthorized")
+	ErrForbidden          = errors.New("forbidden")
+	ErrNotFound           = errors.New("not found")
+	ErrConflict           = errors.New("conflict")
+	ErrUnavailable        = errors.New("service unavailable")
+	ErrValidation         = errors.New("validation failed")
+)
+
 const (
-	// Token
-	UnExpectedError = "Expected error"
-	ClaimsNotFound  = "Claims not found"
-	TokenRequired   = "token required"
-	TokenExpired    = "token expired"
-	TokenInvalid    = "token invalid"
-
-	// OTP
-	OptExists   = "Otp exists"
-	OtpUsed     = "Otp used"
-	OtpNotValid = "Otp invalid"
-
-	// User
-	EmailExists    = "Email exists"
-	UsernameExists = "Username exists"
+	EmailExists      = "Email exists"
+	UsernameExists   = "Username exists"
+	RecordNotFound   = "record not found"
 	PermissionDenied = "Permission denied"
-
-	// DB
-	RecordNotFound = "record not found"
+	TokenRequired    = "token required"
+	TokenExpired     = "token expired"
+	TokenInvalid     = "token invalid"
 )

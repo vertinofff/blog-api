@@ -1,0 +1,7 @@
+# Secrets are intentionally absent. Supply POSTGRES_PASSWORD, JWT_SECRET and
+# JWT_REFRESH_SECRET from the deployment secret manager.
+server: { internalPort: "8000", runMode: release }
+logger: { level: info, logger: zap, filePath: ./logs/ }
+postgres: { host: localhost, port: "5432", user: blog, dbName: blog, sslMode: verify-full, timeZone: UTC, maxIdleConns: 10, maxOpenConns: 25, connMaxLifetime: 5m }
+password: { includeChars: true, includeDigits: true, includeUppercase: true, includeLowercase: true, minLength: 12, maxLength: 64 }
+jwt: { accessTokenExpireDuration: 15, refreshTokenExpireDuration: 10080 }

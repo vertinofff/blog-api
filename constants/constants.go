@@ -4,7 +4,7 @@ const (
 
 	// default user information
 	DefaultUserName string = "default_username"
-	DefaultEmail string  = "delfult@gmail.com"
+	DefaultEmail    string = "delfult@gmail.com"
 	DefaultPassword string = "12345678"
 
 	// end user information

@@ -1,11 +1,17 @@
 package service_errors
 
 type ServiceError struct {
-	EndUserMessage   string `json:"endUserMessage"`
-	TechnicalMessage string `json:"technicalMessage"`
-	Err              error
+	Public string
+	Err    error
 }
 
-func (s *ServiceError) Error() string {
-	return s.EndUserMessage
+func (e *ServiceError) Error() string {
+	if e.Public != "" {
+		return e.Public
+	}
+	if e.Err != nil {
+		return e.Err.Error()
+	}
+	return "internal error"
 }
+func (e *ServiceError) Unwrap() error { return e.Err }

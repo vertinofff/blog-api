@@ -1,12 +1,12 @@
 package logging
 
 import (
+	"fmt"
+	"github.com/google/uuid"
 	"github.com/vertinofff/blog-api/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
-	"fmt"
-	"github.com/google/uuid"
 	"time"
 )
 
@@ -40,33 +40,32 @@ func (l *zapLogger) getLogLevel() zapcore.Level {
 }
 
 func (l *zapLogger) Init() {
-	
-		fileName := fmt.Sprintf("%s%s-%s.%s",l.cfg.Logger.FilePath,time.Now().Format("2006-01-02"),uuid.New(),"log")
-		w := zapcore.AddSync(&lumberjack.Logger{
-			Filename:   fileName,
-			MaxSize:    1,
-			MaxAge:     20,
-			LocalTime:  true,
-			MaxBackups: 5,
-			Compress:   true,
-		})
 
-		config := zap.NewProductionEncoderConfig()
-		config.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileName := fmt.Sprintf("%s%s-%s.%s", l.cfg.Logger.FilePath, time.Now().Format("2006-01-02"), uuid.New(), "log")
+	w := zapcore.AddSync(&lumberjack.Logger{
+		Filename:   fileName,
+		MaxSize:    1,
+		MaxAge:     20,
+		LocalTime:  true,
+		MaxBackups: 5,
+		Compress:   true,
+	})
 
-		core := zapcore.NewCore(
-			zapcore.NewJSONEncoder(config),
-			w,
-			l.getLogLevel(),
-		)
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.ISO8601TimeEncoder
 
-		logger := zap.New(core, zap.AddCaller(),
-			zap.AddCallerSkip(1),
-			zap.AddStacktrace(zapcore.ErrorLevel),
-		).Sugar()
+	core := zapcore.NewCore(
+		zapcore.NewJSONEncoder(config),
+		w,
+		l.getLogLevel(),
+	)
 
-		zapSinLogger = logger.With("AppName", "MyApp", "LoggerName", "Zaplog")
+	logger := zap.New(core, zap.AddCaller(),
+		zap.AddCallerSkip(1),
+		zap.AddStacktrace(zapcore.ErrorLevel),
+	).Sugar()
 
+	zapSinLogger = logger.With("AppName", "MyApp", "LoggerName", "Zaplog")
 
 	l.logger = zapSinLogger
 }

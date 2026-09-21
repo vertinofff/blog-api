@@ -1,106 +1,53 @@
 package common
 
 import (
-	"math/rand"
+	"crypto/rand"
+	"github.com/vertinofff/blog-api/config"
+	"math/big"
 	"regexp"
 	"strings"
 	"unicode"
-	"github.com/vertinofff/blog-api/config"
 )
 
 var (
-	lowerCharSet   = "abcdedfghijklmnopqrst"
+	lowerCharSet   = "abcdefghijklmnopqrst"
 	upperCharSet   = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	specialCharSet = "!@#$%&*"
 	numberSet      = "0123456789"
 	allCharSet     = lowerCharSet + upperCharSet + specialCharSet + numberSet
+	matchFirstCap  = regexp.MustCompile("(.)([A-Z][a-z]+)")
+	matchAllCap    = regexp.MustCompile("([a-z0-9])([A-Z])")
 )
 
-var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
-var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
-
-func CheckPassword(password string) bool {
-	cfg := config.GetConfig()
-	if len(password) < cfg.Password.MinLength {
+func CheckPassword(password string, policy config.PasswordConfig) bool {
+	if len(password) < policy.MinLength || len(password) > policy.MaxLength {
 		return false
 	}
-
-	if cfg.Password.IncludeChars && !HasLetter(password) {
+	if policy.IncludeChars && !HasLetter(password) {
 		return false
 	}
-
-	if cfg.Password.IncludeDigits && !HasDigits(password) {
+	if policy.IncludeDigits && !HasDigits(password) {
 		return false
 	}
-
-	if cfg.Password.IncludeLowercase && !HasLower(password) {
+	if policy.IncludeLowercase && !HasLower(password) {
 		return false
 	}
-
-	if cfg.Password.IncludeUppercase && !HasUpper(password) {
-		return false
-	}
-
-	return true
+	return !policy.IncludeUppercase || HasUpper(password)
 }
-
-func GeneratePassword() string {
-	var password strings.Builder
-
-	cfg := config.GetConfig()
-	passwordLength := cfg.Password.MinLength + 2
-	minSpecialChar := 2
-	minNum := 3
-	if !cfg.Password.IncludeDigits {
-		minNum = 0
+func GeneratePassword(length int) (string, error) {
+	if length < 12 {
+		length = 12
 	}
-
-	minUpperCase := 3
-	if !cfg.Password.IncludeUppercase {
-		minUpperCase = 0
+	var b strings.Builder
+	for i := 0; i < length; i++ {
+		n, e := rand.Int(rand.Reader, big.NewInt(int64(len(allCharSet))))
+		if e != nil {
+			return "", e
+		}
+		b.WriteByte(allCharSet[n.Int64()])
 	}
-
-	minLowerCase := 3
-	if !cfg.Password.IncludeLowercase {
-		minLowerCase = 0
-	}
-
-	//Set special character
-	for i := 0; i < minSpecialChar; i++ {
-		random := rand.Intn(len(specialCharSet))
-		password.WriteString(string(specialCharSet[random]))
-	}
-
-	//Set numeric
-	for i := 0; i < minNum; i++ {
-		random := rand.Intn(len(numberSet))
-		password.WriteString(string(numberSet[random]))
-	}
-
-	//Set uppercase
-	for i := 0; i < minUpperCase; i++ {
-		random := rand.Intn(len(upperCharSet))
-		password.WriteString(string(upperCharSet[random]))
-	}
-
-	//Set lowercase
-	for i := 0; i < minLowerCase; i++ {
-		random := rand.Intn(len(lowerCharSet))
-		password.WriteString(string(lowerCharSet[random]))
-	}
-
-	remainingLength := passwordLength - minSpecialChar - minNum - minUpperCase
-	for i := 0; i < remainingLength; i++ {
-		random := rand.Intn(len(allCharSet))
-		password.WriteString(string(allCharSet[random]))
-	}
-	inRune := []rune(password.String())
-	rand.Shuffle(len(inRune), func(i, j int) {
-		inRune[i], inRune[j] = inRune[j], inRune[i]
-	})
-	return string(inRune)
+	return b.String(), nil
 }
-
 func HasUpper(s string) bool {
 	for _, r := range s {
 		if unicode.IsUpper(r) && unicode.IsLetter(r) {
@@ -109,7 +56,6 @@ func HasUpper(s string) bool {
 	}
 	return false
 }
-
 func HasLower(s string) bool {
 	for _, r := range s {
 		if unicode.IsLower(r) && unicode.IsLetter(r) {
@@ -118,7 +64,6 @@ func HasLower(s string) bool {
 	}
 	return false
 }
-
 func HasLetter(s string) bool {
 	for _, r := range s {
 		if unicode.IsLetter(r) {
@@ -127,7 +72,6 @@ func HasLetter(s string) bool {
 	}
 	return false
 }
-
 func HasDigits(s string) bool {
 	for _, r := range s {
 		if unicode.IsDigit(r) {
@@ -136,9 +80,7 @@ func HasDigits(s string) bool {
 	}
 	return false
 }
-
 func ToSnakeCase(str string) string {
 	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
-	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
-	return strings.ToLower(snake)
+	return strings.ToLower(matchAllCap.ReplaceAllString(snake, "${1}_${2}"))
 }

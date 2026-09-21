@@ -1,52 +1,30 @@
 package middlewares
 
 import (
+	"github.com/gin-gonic/gin"
+	helper "github.com/vertinofff/blog-api/api/helpers"
+	"github.com/vertinofff/blog-api/constants"
+	"github.com/vertinofff/blog-api/services"
 	"net/http"
 	"strings"
-	helper "github.com/vertinofff/blog-api/api/helpers"
-	"github.com/vertinofff/blog-api/config"
-	"github.com/vertinofff/blog-api/constants"
-	"github.com/vertinofff/blog-api/pkg/service_errors"
-	"github.com/vertinofff/blog-api/services"
-	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt"
 )
 
-func Authentication(cfg *config.Config) gin.HandlerFunc {
-	var tokenService = services.NewTokenService(cfg)
-
+func Authentication(tokens *services.TokenService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var err error
-		claimMap := map[string]interface{}{}
-		auth := c.GetHeader(constants.AuthorizationHeaderKey)
-		token := strings.Split(auth, " ")
-		if auth == "" {
-			err = &service_errors.ServiceError{EndUserMessage: service_errors.TokenRequired}
-		} else {
-			claimMap, err = tokenService.GetClaims(token[1])
-			if err != nil {
-				switch err.(*jwt.ValidationError).Errors {
-				case jwt.ValidationErrorExpired:
-					err = &service_errors.ServiceError{EndUserMessage: service_errors.TokenExpired}
-				default:
-					err = &service_errors.ServiceError{EndUserMessage: service_errors.TokenInvalid}
-				}
-			}
-		}
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, helper.GenerateBaseResponseWithError(
-				nil, false, helper.AuthError, err,
-			))
+		parts := strings.Fields(c.GetHeader(constants.AuthorizationHeaderKey))
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, helper.GenerateBaseResponseWithAnyError(nil, false, helper.AuthError, "unauthorized"))
 			return
 		}
-
-		c.Set(constants.UserIdKey, claimMap[constants.UserIdKey])
-		c.Set(constants.FirstNameKey, claimMap[constants.FirstNameKey])
-		c.Set(constants.LastNameKey, claimMap[constants.LastNameKey])
-		c.Set(constants.UsernameKey, claimMap[constants.UsernameKey])
-		c.Set(constants.EmailKey, claimMap[constants.EmailKey])
-		c.Set(constants.ExpireTimeKey, claimMap[constants.ExpireTimeKey])
-
+		claims, e := tokens.GetAccessClaims(parts[1])
+		if e != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, helper.GenerateBaseResponseWithAnyError(nil, false, helper.AuthError, "unauthorized"))
+			return
+		}
+		id := uint(claims[constants.UserIdKey].(float64))
+		c.Set(constants.UserIdKey, id)
+		c.Set(constants.UsernameKey, claims[constants.UsernameKey])
+		c.Set(constants.EmailKey, claims[constants.EmailKey])
 		c.Next()
 	}
 }

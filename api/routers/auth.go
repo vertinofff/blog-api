@@ -1,13 +1,11 @@
 package routers
 
 import (
-	handler "github.com/vertinofff/blog-api/api/handlers"
-	"github.com/vertinofff/blog-api/config"
 	"github.com/gin-gonic/gin"
+	handler "github.com/vertinofff/blog-api/api/handlers"
 )
 
-func Auth(router *gin.RouterGroup, cfg *config.Config) {
-	h := handler.NewUsersHandler(cfg)
+func Auth(router *gin.RouterGroup, h *handler.AuthHandler) {
 	router.POST("/register", h.Register)
 	router.POST("/login", h.Login)
 }

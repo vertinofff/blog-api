@@ -1,8 +1,8 @@
 package helper
 
 import (
-	"net/http"
 	"github.com/vertinofff/blog-api/pkg/service_errors"
+	"net/http"
 )
 
 var StatusCodeMapping = map[string]int{

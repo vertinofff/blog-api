@@ -1,105 +1,54 @@
 package services
 
 import (
-	"time"
-
+	"errors"
+	"github.com/golang-jwt/jwt"
 	"github.com/vertinofff/blog-api/api/dto"
 	"github.com/vertinofff/blog-api/config"
 	"github.com/vertinofff/blog-api/constants"
-	"github.com/vertinofff/blog-api/pkg/logging"
 	"github.com/vertinofff/blog-api/pkg/service_errors"
-	"github.com/golang-jwt/jwt"
+	"time"
 )
 
-type TokenService struct {
-	logger logging.Logger
-	cfg    *config.Config
-}
+type TokenService struct{ cfg *config.Config }
 
-type tokenDto struct {
-	UserId       int
-	FirstName    string
-	LastName     string
-	Username     string
-	MobileNumber string
-	Email        string
-	Roles        []string
-}
-
-func NewTokenService(cfg *config.Config) *TokenService {
-	logger := logging.NewLogger(cfg)
-	return &TokenService{
-		cfg:    cfg,
-		logger: logger,
-	}
-}
-
-func (s *TokenService) GenerateToken(token *tokenDto) (*dto.TokenDetail, error) {
-	td := &dto.TokenDetail{}
-	td.AccessTokenExpireTime = time.Now().Add(s.cfg.JWT.AccessTokenExpireDuration * time.Minute).Unix()
-	td.RefreshTokenExpireTime = time.Now().Add(s.cfg.JWT.RefreshTokenExpireDuration * time.Minute).Unix()
-
-	atc := jwt.MapClaims{}
-
-	atc[constants.UserIdKey] = token.UserId
-	atc[constants.FirstNameKey] = token.FirstName
-	atc[constants.LastNameKey] = token.LastName
-	atc[constants.UsernameKey] = token.Username
-	atc[constants.EmailKey] = token.Email
-	atc[constants.ExpireTimeKey] = td.AccessTokenExpireTime
-
-	at := jwt.NewWithClaims(jwt.SigningMethodHS256, atc)
-
+func NewTokenService(cfg *config.Config) *TokenService { return &TokenService{cfg: cfg} }
+func (s *TokenService) GenerateToken(userID int, username, email string) (*dto.TokenDetail, error) {
+	now := time.Now()
+	td := &dto.TokenDetail{AccessTokenExpireTime: now.Add(s.cfg.JWT.AccessTokenExpireDuration * time.Minute).Unix(), RefreshTokenExpireTime: now.Add(s.cfg.JWT.RefreshTokenExpireDuration * time.Minute).Unix()}
+	access := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{constants.UserIdKey: userID, constants.UsernameKey: username, constants.EmailKey: email, constants.ExpireTimeKey: td.AccessTokenExpireTime, "typ": "access"})
 	var err error
-	td.AccessToken, err = at.SignedString([]byte(s.cfg.JWT.Secret))
-
+	td.AccessToken, err = access.SignedString([]byte(s.cfg.JWT.Secret))
 	if err != nil {
 		return nil, err
 	}
-
-	rtc := jwt.MapClaims{}
-
-	rtc[constants.UserIdKey] = token.UserId
-	rtc[constants.ExpireTimeKey] = td.RefreshTokenExpireTime
-
-	rt := jwt.NewWithClaims(jwt.SigningMethodHS256, rtc)
-
-	td.RefreshToken, err = rt.SignedString([]byte(s.cfg.JWT.RefreshSecret))
-
+	refresh := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{constants.UserIdKey: userID, constants.ExpireTimeKey: td.RefreshTokenExpireTime, "typ": "refresh"})
+	td.RefreshToken, err = refresh.SignedString([]byte(s.cfg.JWT.RefreshSecret))
 	if err != nil {
 		return nil, err
 	}
-
 	return td, nil
 }
-
-func (s *TokenService) VerifyToken(token string) (*jwt.Token, error) {
-	at, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
-		_, ok := token.Method.(*jwt.SigningMethodHMAC)
-		if !ok {
-			return nil, &service_errors.ServiceError{EndUserMessage: service_errors.UnExpectedError}
+func (s *TokenService) GetAccessClaims(raw string) (map[string]interface{}, error) {
+	token, err := jwt.Parse(raw, func(t *jwt.Token) (interface{}, error) {
+		if t.Method.Alg() != jwt.SigningMethodHS256.Alg() {
+			return nil, service_errors.ErrUnauthorized
 		}
 		return []byte(s.cfg.JWT.Secret), nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, service_errors.ErrUnauthorized
 	}
-	return at, nil
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || !token.Valid || claims["typ"] != "access" {
+		return nil, service_errors.ErrUnauthorized
+	}
+	if _, ok := claims[constants.UserIdKey].(float64); !ok {
+		return nil, service_errors.ErrUnauthorized
+	}
+	return claims, nil
 }
-
-func (s *TokenService) GetClaims(token string) (claimMap map[string]interface{}, err error) {
-	claimMap = map[string]interface{}{}
-
-	verifyToken, err := s.VerifyToken(token)
-	if err != nil {
-		return nil, err
-	}
-	claims, ok := verifyToken.Claims.(jwt.MapClaims)
-	if ok && verifyToken.Valid {
-		for k, v := range claims {
-			claimMap[k] = v
-		}
-		return claimMap, nil
-	}
-	return nil, &service_errors.ServiceError{EndUserMessage: service_errors.ClaimsNotFound}
+func IsExpired(err error) bool {
+	var v *jwt.ValidationError
+	return errors.As(err, &v) && v.Errors&jwt.ValidationErrorExpired != 0
 }

@@ -1,125 +1,46 @@
 package services
 
 import (
+	"context"
+	"errors"
 	"github.com/vertinofff/blog-api/api/dto"
-	"github.com/vertinofff/blog-api/config"
-	"github.com/vertinofff/blog-api/data/db"
 	"github.com/vertinofff/blog-api/data/models"
-	"github.com/vertinofff/blog-api/pkg/logging"
 	"github.com/vertinofff/blog-api/pkg/service_errors"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
 type UserService struct {
-	logger       logging.Logger
-	cfg          *config.Config
-	tokenService *TokenService
-	database     *gorm.DB
+	db     *gorm.DB
+	tokens *TokenService
 }
 
-func NewUserService(cfg *config.Config) *UserService {
-	database := db.GetDb()
-	logger := logging.NewLogger(cfg)
-	return &UserService{
-		cfg:          cfg,
-		database:     database,
-		logger:       logger,
-		tokenService: NewTokenService(cfg),
-	}
+func NewUserService(db *gorm.DB, tokens *TokenService) *UserService {
+	return &UserService{db: db, tokens: tokens}
 }
-
-// Login 
-func (s *UserService) LoginByUsername(req *dto.LoginByUsernameRequest) (*dto.TokenDetail, error) {
-	var user models.User
-	err := s.database.
-		Model(&models.User{}).
-		Where("username = ?", req.Username).
-		Find(&user).Error
+func (s *UserService) LoginByUsername(ctx context.Context, req *dto.LoginByUsernameRequest) (*dto.TokenDetail, error) {
+	var u models.User
+	err := s.db.WithContext(ctx).Where("username = ?", req.Username).First(&u).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, service_errors.ErrInvalidCredentials
+		}
 		return nil, err
 	}
-	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password))
-	if err != nil {
-		return nil, err
+	if bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(req.Password)) != nil {
+		return nil, service_errors.ErrInvalidCredentials
 	}
-	tdto := tokenDto{UserId: user.Id, Username: user.Username,
-		Email: user.Email}
-
-	token, err := s.tokenService.GenerateToken(&tdto)
-	if err != nil {
-		return nil, err
-	}
-	return token, nil
-
+	return s.tokens.GenerateToken(u.Id, u.Username, u.Email)
 }
-
-
-// Register
-func (s *UserService) RegisterByUsername(req *dto.RegisterUserByUsernameRequest) error {
-	u := models.User{Username: req.Username, Email: req.Email}
-
-	exists, err := s.existsByEmail(req.Email)
+func (s *UserService) RegisterByUsername(ctx context.Context, req *dto.RegisterUserByUsernameRequest) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
-	if exists {
-		return &service_errors.ServiceError{EndUserMessage: service_errors.EmailExists}
+	u := models.User{Username: req.Username, Email: req.Email, Password: string(hash)}
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error { return tx.Create(&u).Error })
+	if err != nil { // Drivers differ; unique constraints are authoritative and mapped here conservatively.
+		return &service_errors.ServiceError{Public: "user already exists", Err: service_errors.ErrConflict}
 	}
-	exists, err = s.existsByUsername(req.Username)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return &service_errors.ServiceError{EndUserMessage: service_errors.UsernameExists}
-	}
-
-	bp := []byte(req.Password)
-	hp, err := bcrypt.GenerateFromPassword(bp, bcrypt.DefaultCost)
-	if err != nil {
-		s.logger.Error(logging.General, logging.HashPassword, err.Error(), nil)
-		return err
-	}
-	u.Password = string(hp)
-
-	tx := s.database.Begin()
-	err = tx.Create(&u).Error
-	if err != nil {
-		tx.Rollback()
-		s.logger.Error(logging.Postgres, logging.Rollback, err.Error(), nil)
-		return err
-	}
-	if err != nil {
-		tx.Rollback()
-		s.logger.Error(logging.Postgres, logging.Rollback, err.Error(), nil)
-		return err
-	}
-	tx.Commit()
 	return nil
-}
-
-func (s *UserService) existsByEmail(email string) (bool, error) {
-	var exists bool
-	if err := s.database.Model(&models.User{}).
-		Select("count(*) > 0").
-		Where("email = ?", email).
-		Find(&exists).
-		Error; err != nil {
-		s.logger.Error(logging.Postgres, logging.Select, err.Error(), nil)
-		return false, err
-	}
-	return exists, nil
-}
-
-func (s *UserService) existsByUsername(username string) (bool, error) {
-	var exists bool
-	if err := s.database.Model(&models.User{}).
-		Select("count(*) > 0").
-		Where("username = ?", username).
-		Find(&exists).
-		Error; err != nil {
-		s.logger.Error(logging.Postgres, logging.Select, err.Error(), nil)
-		return false, err
-	}
-	return exists, nil
 }

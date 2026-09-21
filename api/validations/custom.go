@@ -15,8 +15,8 @@ type ValidationError struct {
 func GetValidationErrors(err error) *[]ValidationError {
 	var validationErrors []ValidationError
 	var ve validator.ValidationErrors
-	if errors.As(err,&ve){
-		for _, err := range err.(validator.ValidationErrors){
+	if errors.As(err, &ve) {
+		for _, err := range err.(validator.ValidationErrors) {
 			var el ValidationError
 			el.Property = err.Field()
 			el.Tag = err.Tag()

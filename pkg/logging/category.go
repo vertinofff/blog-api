@@ -1,17 +1,15 @@
 package logging
 
-
 type Category string
 type SubCategory string
 type ExtraKey string
 
-
 const (
-	General Category = "General"
-	Internal Category = "Internal"
-	Postgres Category = "Postgres"
-	Redis Category = "Redis"
-	Validation Category = "Validation"
+	General         Category = "General"
+	Internal        Category = "Internal"
+	Postgres        Category = "Postgres"
+	Redis           Category = "Redis"
+	Validation      Category = "Validation"
 	RequestResponse Category = "RequestResponse"
 )
 const (
@@ -28,8 +26,8 @@ const (
 	Insert    SubCategory = "Insert"
 
 	// Internal
-	Api                 SubCategory = "Api"
-	HashPassword        SubCategory = "HashPassword"
+	Api          SubCategory = "Api"
+	HashPassword SubCategory = "HashPassword"
 )
 
 const (

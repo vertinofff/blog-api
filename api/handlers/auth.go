@@ -1,57 +1,40 @@
 package handler
 
 import (
-	"net/http"
-
+	"github.com/gin-gonic/gin"
 	"github.com/vertinofff/blog-api/api/dto"
 	helper "github.com/vertinofff/blog-api/api/helpers"
-	"github.com/vertinofff/blog-api/config"
 	"github.com/vertinofff/blog-api/services"
-	"github.com/gin-gonic/gin"
-	
+	"net/http"
 )
 
-type AuthHandler struct {
-	service *services.UserService
-}
+type AuthHandler struct{ service *services.UserService }
 
-func NewUsersHandler(cfg *config.Config) *AuthHandler {
-	service := services.NewUserService(cfg)
+func NewUsersHandler(service *services.UserService) *AuthHandler {
 	return &AuthHandler{service: service}
 }
-
 func (h *AuthHandler) Login(c *gin.Context) {
 	req := new(dto.LoginByUsernameRequest)
-	err := c.ShouldBindJSON(&req)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest,
-			helper.GenerateBaseResponseWithValidationError(nil, false, helper.ValidationError, err))
+	if e := c.ShouldBindJSON(req); e != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, helper.GenerateBaseResponseWithValidationError(nil, false, helper.ValidationError, e))
 		return
 	}
-	token, err := h.service.LoginByUsername(req)
-	if err != nil {
-		c.AbortWithStatusJSON(helper.TranslateErrorToStatusCode(err),
-			helper.GenerateBaseResponseWithError(nil, false, helper.InternalError, err))
+	token, e := h.service.LoginByUsername(c.Request.Context(), req)
+	if e != nil {
+		helper.WriteError(c, e)
 		return
 	}
-
 	c.JSON(http.StatusCreated, helper.GenerateBaseResponse(token, true, helper.Success))
 }
-
 func (h *AuthHandler) Register(c *gin.Context) {
 	req := new(dto.RegisterUserByUsernameRequest)
-	err := c.ShouldBindJSON(&req)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest,
-			helper.GenerateBaseResponseWithValidationError(nil, false, helper.ValidationError, err))
+	if e := c.ShouldBindJSON(req); e != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, helper.GenerateBaseResponseWithValidationError(nil, false, helper.ValidationError, e))
 		return
 	}
-	err = h.service.RegisterByUsername(req)
-	if err != nil {
-		c.AbortWithStatusJSON(helper.TranslateErrorToStatusCode(err),
-			helper.GenerateBaseResponseWithError(nil, false, helper.InternalError, err))
+	if e := h.service.RegisterByUsername(c.Request.Context(), req); e != nil {
+		helper.WriteError(c, e)
 		return
 	}
-
 	c.JSON(http.StatusCreated, helper.GenerateBaseResponse(nil, true, helper.Success))
 }

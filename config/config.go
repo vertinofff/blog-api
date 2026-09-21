@@ -2,9 +2,12 @@ package config
 
 import (
 	"errors"
-	"log"
+	"fmt"
 	"os"
+	"strings"
+	"sync"
 	"time"
+
 	"github.com/spf13/viper"
 )
 
@@ -14,109 +17,91 @@ type Config struct {
 	Password PasswordConfig
 	Logger   LoggerConfig
 	JWT      JWTConfig
-	API 	APIConfig
 }
-
-type ServerConfig struct {
-	InternalPort    string
-	ExternalPort    string
-	RunMode string
-}
-
-type LoggerConfig struct {
-	FilePath string
-	Encoding string
-	Level    string
-	Logger   string
-}
-
+type ServerConfig struct{ InternalPort, ExternalPort, RunMode string }
+type LoggerConfig struct{ FilePath, Encoding, Level, Logger string }
 type PostgresConfig struct {
-	Host            string
-	Port            string
-	User            string
-	Password        string
-	DbName          string
-	SSLMode         string
-	MaxIdleConns    int
-	MaxOpenConns    int
-	ConnMaxLifetime time.Duration
+	Host, Port, User, Password, DbName, SSLMode, TimeZone string
+	MaxIdleConns, MaxOpenConns                            int
+	ConnMaxLifetime                                       time.Duration
 }
-
-
 type PasswordConfig struct {
-	IncludeChars     bool
-	IncludeDigits    bool
-	MinLength        int
-	MaxLength        int
-	IncludeUppercase bool
-	IncludeLowercase bool
+	IncludeChars, IncludeDigits, IncludeUppercase, IncludeLowercase bool
+	MinLength, MaxLength                                            int
 }
-
-
-
 type JWTConfig struct {
-	AccessTokenExpireDuration  time.Duration
-	RefreshTokenExpireDuration time.Duration
-	Secret                     string
-	RefreshSecret              string
+	AccessTokenExpireDuration, RefreshTokenExpireDuration time.Duration
+	Secret, RefreshSecret                                 string
 }
 
-type APIConfig struct {
-	BaseUrl string
-	Token string
-	
-}
+var (
+	once    sync.Once
+	loaded  *Config
+	loadErr error
+)
 
+// Load reads configuration once. Environment variables use names such as
+// JWT_SECRET, JWT_REFRESH_SECRET, POSTGRES_PASSWORD, and PORT.
+func Load() (*Config, error) { once.Do(func() { loaded, loadErr = load() }); return loaded, loadErr }
+
+// GetConfig remains for compatibility. Application code should inject Config.
 func GetConfig() *Config {
-	cfgPath := getConfigPath(os.Getenv("APP_ENV"))
-	v, err := LoadConfig(cfgPath, "yml")
+	cfg, err := Load()
 	if err != nil {
-		log.Fatalf("Error in load config %v", err)
+		panic(err)
 	}
-
-	cfg, err := ParseConfig(v)
-	envPort := os.Getenv("PORT")
-	if envPort != ""{
-		cfg.Server.ExternalPort = envPort
-		log.Printf("Set external port from environment -> %s", cfg.Server.ExternalPort)
-	}else{
-		cfg.Server.ExternalPort = cfg.Server.InternalPort
-		log.Printf("Set external port from environment -> %s", cfg.Server.ExternalPort)
-	}
-	if err != nil {
-		log.Fatalf("Error in parse config %v", err)
-	}
-
 	return cfg
 }
 
-func ParseConfig(v *viper.Viper) (*Config, error) {
+func load() (*Config, error) {
+	env := strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV")))
+	if env == "" {
+		env = "development"
+	}
+	if env != "development" && env != "production" && env != "test" {
+		return nil, fmt.Errorf("unsupported APP_ENV %q", env)
+	}
+	v := viper.New()
+	v.SetConfigFile("config/config-" + env + ".yml")
+	v.SetConfigType("yml")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+	if err := v.ReadInConfig(); err != nil {
+		var notFound viper.ConfigFileNotFoundError
+		if !errors.As(err, &notFound) {
+			return nil, fmt.Errorf("read config: %w", err)
+		}
+	}
+	for key, name := range map[string]string{"server.internalport": "PORT", "postgres.password": "POSTGRES_PASSWORD", "jwt.secret": "JWT_SECRET", "jwt.refreshsecret": "JWT_REFRESH_SECRET"} {
+		_ = v.BindEnv(key, name)
+	}
 	var cfg Config
-	err := v.Unmarshal(&cfg)
-	if err != nil {
-		log.Printf("Unable to parse config: %v", err)
-		return nil, err
+	if err := v.Unmarshal(&cfg); err != nil {
+		return nil, fmt.Errorf("parse config: %w", err)
+	}
+	if cfg.Server.InternalPort == "" {
+		return nil, errors.New("server internalPort is required")
+	}
+	cfg.Server.ExternalPort = cfg.Server.InternalPort
+	if cfg.Postgres.TimeZone == "" {
+		cfg.Postgres.TimeZone = "UTC"
+	}
+	if cfg.Postgres.MaxIdleConns < 0 || cfg.Postgres.MaxOpenConns <= 0 {
+		return nil, errors.New("invalid postgres pool configuration")
+	}
+	if cfg.JWT.Secret == "" || cfg.JWT.RefreshSecret == "" {
+		return nil, errors.New("JWT_SECRET and JWT_REFRESH_SECRET are required")
+	}
+	if cfg.JWT.Secret == cfg.JWT.RefreshSecret {
+		return nil, errors.New("access and refresh JWT secrets must differ")
+	}
+	if env == "production" {
+		if cfg.Postgres.SSLMode == "disable" || cfg.Postgres.SSLMode == "" {
+			return nil, errors.New("production PostgreSQL requires TLS")
+		}
+		if len(cfg.JWT.Secret) < 32 || len(cfg.JWT.RefreshSecret) < 32 {
+			return nil, errors.New("production JWT secrets must be at least 32 bytes")
+		}
 	}
 	return &cfg, nil
-}
-func LoadConfig(filename string, fileType string) (*viper.Viper, error) {
-	v := viper.New()
-	v.SetConfigType(fileType)
-	v.SetConfigName(filename)
-	v.AddConfigPath(".")
-	v.AutomaticEnv()
-
-	err := v.ReadInConfig()
-	if err != nil {
-		log.Printf("Unable to read config: %v", err)
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			return nil, errors.New("config file not found")
-		}
-		return nil, err
-	}
-	return v, nil
-}
-
-func getConfigPath(env string) string {
-	return "config/config-development"
 }
